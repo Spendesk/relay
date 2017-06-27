@@ -39,13 +39,14 @@ const printBabel = ast => babelGenerator(ast).code;
 function generate(
   node: Root | Fragment,
   inputFieldWhiteList?: Array<string>,
+  nodes,
 ): string {
   const output = [];
   if (node.kind === 'Root' && node.operation !== 'query') {
     const inputAST = generateInputVariablesType(node, inputFieldWhiteList);
     output.push(printBabel(inputAST));
   }
-  const responseAST = RelayIRVisitor.visit(node, RelayCodeGenVisitor);
+  const responseAST = RelayIRVisitor.visit(node, RelayCodeGenVisitor(nodes));
   output.push(printBabel(responseAST));
   return output.join('\n\n');
 }
@@ -106,7 +107,7 @@ function selectionsToBabel(selections) {
   ) {
     for (const concreteType in byConcreteType) {
       types.push(
-        exactObjectTypeAnnotation([
+        t.objectTypeAnnotation([
           ...Array.from(baseFields.values()).map(selection =>
             makeProp(selection, concreteType),
           ),
@@ -127,7 +128,7 @@ function selectionsToBabel(selections) {
       "This will never be '%other', but we need some",
       'value in case none of the concrete values match.',
     );
-    types.push(exactObjectTypeAnnotation([otherProp]));
+    types.push(t.objectTypeAnnotation([otherProp]));
   } else {
     let selectionMap = selectionsToMap(Array.from(baseFields.values()));
     for (const concreteType in byConcreteType) {
@@ -142,14 +143,14 @@ function selectionsToBabel(selections) {
       );
     }
     types.push(
-      exactObjectTypeAnnotation(
+      t.objectTypeAnnotation(
         Array.from(selectionMap.values()).map(sel => makeProp(sel)),
       ),
     );
   }
 
   if (!types.length) {
-    return exactObjectTypeAnnotation([]);
+    return t.objectTypeAnnotation([]);
   }
 
   return types.length > 1 ? t.unionTypeAnnotation(types) : types[0];
@@ -204,7 +205,18 @@ function isPlural({directives}): boolean {
   }
 }
 
-const RelayCodeGenVisitor = {
+const RelayCodeGenVisitor = (nodes) => ({
+  enter: {
+    FragmentSpread(node) {
+      const fragmentNode = nodes.find(n => n.kind === 'Fragment' && n.name === node.name);
+      
+      return {
+        ...fragmentNode,
+        kind: 'InlineFragment',
+        typeCondition: fragmentNode.type,
+      };
+    },
+  },
   leave: {
     Root(node) {
       return t.exportNamedDeclaration(
@@ -274,7 +286,7 @@ const RelayCodeGenVisitor = {
       return [];
     },
   },
-};
+});
 
 function selectionsToMap(selections) {
   const map = new Map();

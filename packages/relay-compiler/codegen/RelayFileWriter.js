@@ -191,6 +191,7 @@ class RelayFileWriter {
           const flowTypes = RelayFlowGenerator.generate(
             node,
             this._config.inputFieldWhiteListForFlow,
+            nodes,
           );
           const compiledNode = compiledDocumentMap.get(node.name);
           invariant(
